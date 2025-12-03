@@ -1,5 +1,9 @@
 ﻿using System.Collections.Frozen;
+using System.Data.Common;
 using Gaia.Errors;
+using Gaia.Helpers;
+using Gaia.Models;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Nestor.Db.Helpers;
 using Nestor.Db.Models;
@@ -18,9 +22,31 @@ public class CredentialService : ICredentialService
         _dbContext = dbContext;
     }
 
-    public ValueTask<TurtleGetResponse> GetAsync(TurtleGetRequest request, CancellationToken ct)
+    public async ValueTask<TurtleGetResponse> GetAsync(TurtleGetRequest request, CancellationToken ct)
     {
-        throw new NotImplementedException();
+        var response = new TurtleGetResponse();
+        var childrenIds = request.GetChildrenIds.Select(x => (Guid?)x).ToFrozenSet();
+        var query = _dbContext.Set<EventEntity>().Where(x => x.Id == -1).Select(x => x.EntityId);
+
+        if (request.IsGetRoots)
+        {
+            query = query.Concat(_dbContext.Set<EventEntity>().GetProperty(nameof(CredentialEntity), nameof(CredentialEntity.ParentId)).Where(x => x.EntityGuidValue == null).Distinct().Select(x => x.EntityId));
+        }
+
+        if (request.GetChildrenIds.Length != 0)
+        {
+            query = query.Concat(_dbContext.Set<EventEntity>().GetProperty(nameof(CredentialEntity), nameof(CredentialEntity.ParentId)).Where(x => childrenIds.Contains(x.EntityGuidValue)).Distinct().Select(x => x.EntityId));
+        }
+
+        if (request.GetParentsIds.Length != 0)
+        {
+            var parameters = CreateSqlRawParametersForAllChildren(request.GetParentsIds);
+            query = query.Concat(_dbContext.Set<TempEntity>().FromSqlRaw(parameters.Sql, parameters.Parameters).Select(x => x.EntityId));
+        }
+    
+        var credentials = await CredentialEntity.GetCredentialEntitysAsync(_dbContext.Set<EventEntity>().Where(x => query.Contains(x.EntityId)), ct);
+        
+        return response;
     }
 
     public async ValueTask<TurtlePostResponse> PostAsync(TurtlePostRequest request, CancellationToken ct)
@@ -171,5 +197,50 @@ public class CredentialService : ICredentialService
         await CredentialEntity.AddCredentialEntitysAsync(_dbContext, "Service", ct, entities.ToArray());
 
         return result;
+    }
+
+    private SqlRawParameters CreateSqlRawParametersForAllChildren(ReadOnlyMemory<Guid> ids)
+    {
+        var idsString = Enumerable.Range(0, ids.Length).Select(i => $"@Id{i}").JoinString(", ");
+        var parameters = new DbParameter[ids.Length];
+
+        for (var i = 0; i < ids.Length; i++)
+        {
+            parameters[i] = new SqliteParameter($"@Id{i}", ids.Span[i]);
+        }
+
+        return new(
+            $"""
+             WITH RECURSIVE hierarchy(
+                     Id,
+                     EntityId,
+                     EntityGuidValue
+                  ) AS (
+                      SELECT
+                      Id,
+                      EntityId,
+                      EntityGuidValue
+                      FROM EventEntity
+                      WHERE EntityId IN ({idsString}) AND EntityProperty = 'ParentId' AND EntityType = 'CredentialEntity' AND Id IN (SELECT MAX(WHEN s.EntityProperty = 'ParentId' AND s.EntityType = 'CredentialEntity' THEN s.Id) FROM EventEntity AS s GROUP BY s.EntityId)
+
+                      UNION ALL
+
+                      SELECT
+                      t.Id,
+                      t.EntityId,
+                      EntityGuidValue
+                      FROM EventEntity t
+                      WHERE EntityProperty = 'ParentId' AND EntityType = 'CredentialEntity' AND t.Id IN (SELECT MAX(WHEN e.EntityProperty = 'ParentId' AND e.EntityType = 'CredentialEntity' THEN e.Id) FROM EventEntity AS e GROUP BY e.EntityId)
+                      INNER JOIN hierarchy h ON t.EntityGuidValue = h.EntityId
+                  )
+                  SELECT DISTINCT EntityId FROM hierarchy;
+             """,
+            parameters
+        );
+    }
+
+    class TempEntity
+    {
+        public Guid EntityId { get; set; }
     }
 }
