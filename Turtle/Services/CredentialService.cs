@@ -43,10 +43,70 @@ public class CredentialService : ICredentialService
             var parameters = CreateSqlRawParametersForAllChildren(request.GetParentsIds);
             query = query.Concat(_dbContext.Set<TempEntity>().FromSqlRaw(parameters.Sql, parameters.Parameters).Select(x => x.EntityId));
         }
-    
+
         var credentials = await CredentialEntity.GetCredentialEntitysAsync(_dbContext.Set<EventEntity>().Where(x => query.Contains(x.EntityId)), ct);
-        
+        var credentialsDictionary = credentials.ToDictionary(x => x.Id).ToFrozenDictionary();
+        response.Roots.AddRange(credentials.Where(x => x.ParentId is null).Select(x => ToCredential(x)));
+
+        foreach (var id in request.GetChildrenIds)
+        {
+            response.Children.Add(id, credentials.Where(y => y.ParentId == id).Select(y => ToCredential(y)).ToList());
+        }
+
+        foreach (var id in request.GetParentsIds)
+        {
+            AddParents(response, id, credentialsDictionary);
+            response.Parents[id].Reverse();
+        }
+
         return response;
+    }
+
+    private void AddParents(TurtleGetResponse response, Guid rootId, FrozenDictionary<Guid, CredentialEntity> credentials)
+    {
+        var credential = ToCredential(credentials[rootId]);
+        response.Parents.Add(rootId, [credential]);
+
+        if (credential.ParentId is null)
+        {
+            return;
+        }
+
+        AddParents(response, rootId, credential.ParentId.Value, credentials);
+    }
+
+    private void AddParents(TurtleGetResponse response, Guid rootId, Guid parentId, FrozenDictionary<Guid, CredentialEntity> credentials)
+    {
+        var credential = ToCredential(credentials[parentId]);
+        response.Parents.Add(rootId, [credential]);
+
+        if (credential.ParentId is null)
+        {
+            return;
+        }
+
+        AddParents(response, rootId, credential.ParentId.Value, credentials);
+    }
+
+    private static Credential ToCredential(CredentialEntity entity)
+    {
+        return new()
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            CustomAvailableCharacters = entity.CustomAvailableCharacters,
+            IsAvailableLowerLatin = entity.IsAvailableLowerLatin,
+            IsAvailableNumber = entity.IsAvailableNumber,
+            IsAvailableSpecialSymbols = entity.IsAvailableSpecialSymbols,
+            IsAvailableUpperLatin = entity.IsAvailableUpperLatin,
+            Key = entity.Key,
+            Length = entity.Length,
+            Regex = entity.Regex,
+            Type = entity.Type,
+            Login = entity.Login,
+            OrderIndex = entity.OrderIndex,
+            ParentId = entity.ParentId,
+        };
     }
 
     public async ValueTask<TurtlePostResponse> PostAsync(TurtlePostRequest request, CancellationToken ct)
@@ -239,7 +299,7 @@ public class CredentialService : ICredentialService
         );
     }
 
-    class TempEntity
+    private class TempEntity
     {
         public Guid EntityId { get; set; }
     }
