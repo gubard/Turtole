@@ -5,6 +5,5 @@ namespace Turtle.Contract.Models;
 
 public class TurtlePostResponse : IValidationErrors
 {
-    public Guid[] CreatedIds { get; set; } = [];
     public ValidationError[] ValidationErrors { get; set; } = [];
 }

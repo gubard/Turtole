@@ -1,19 +1,21 @@
 using Gaia.Helpers;
+using Gaia.Services;
 using Microsoft.EntityFrameworkCore;
 using Nestor.Db.Sqlite;
 using Turtle.Contract.Models;
 using Turtle.Contract.Services;
 using Turtle.Services;
+using Zeus.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-
+builder.Services.AddTransient<IStorageService, StorageService>();
 builder.Services.AddTransient<ICredentialService, CredentialService>();
-builder.Services.AddDbContext<DbContext, SqliteNestorDbContext>(options =>
-    options.UseSqlite("Data Source=manis.db", x => x.MigrationsAssembly(typeof(SqliteNestorDbContext).Assembly)));
+builder.Services.AddDbContext<DbContext, SqliteNestorDbContext>((sp, options) =>
+    options.UseSqlite($"Data Source={sp.GetRequiredService<IStorageService>().GetDbDirectory().ToFile("turtle.db")}", x => x.MigrationsAssembly(typeof(SqliteNestorDbContext).Assembly)));
 
 var app = builder.Build();
 
@@ -35,4 +37,5 @@ app.MapPost(RouteHelper.Post,
             authenticationService.PostAsync(request, ct))
    .WithName(RouteHelper.PostName);
 
+app.Services.CreateDbDirectory();
 app.Run();

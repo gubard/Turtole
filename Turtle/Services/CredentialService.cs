@@ -1,9 +1,6 @@
 ﻿using System.Collections.Frozen;
-using System.Data.Common;
 using Gaia.Errors;
 using Gaia.Helpers;
-using Gaia.Models;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Nestor.Db.Helpers;
 using Nestor.Db.Models;
@@ -40,8 +37,8 @@ public class CredentialService : ICredentialService
 
         if (request.GetParentsIds.Length != 0)
         {
-            var parameters = CreateSqlRawParametersForAllChildren(request.GetParentsIds);
-            query = query.Concat(_dbContext.Set<TempEntity>().FromSqlRaw(parameters.Sql, parameters.Parameters).Select(x => x.EntityId));
+            var sql = CreateSqlForAllChildren(request.GetParentsIds);
+            query = query.Concat(_dbContext.Set<TempEntity>().FromSqlRaw(sql).Select(x => x.EntityId));
         }
 
         var credentials = await CredentialEntity.GetCredentialEntitysAsync(_dbContext.Set<EventEntity>().Where(x => query.Contains(x.EntityId)), ct);
@@ -114,7 +111,7 @@ public class CredentialService : ICredentialService
         var errors = new List<ValidationError>();
         var response = new TurtlePostResponse();
         await DeleteAsync(request.DeleteIds, ct);
-        response.CreatedIds = await CreateAsync(request.CreateCredentials, ct);
+        await CreateAsync(request.CreateCredentials, ct);
         await EditAsync(request.EditCredentials, ct);
         await ChangeOrderAsync(request.ChangeOrders, errors, ct);
         await _dbContext.SaveChangesAsync(ct);
@@ -220,26 +217,23 @@ public class CredentialService : ICredentialService
         return CredentialEntity.EditCredentialEntitysAsync(_dbContext, "Service", editEntities.ToArray(), ct);
     }
 
-    private async ValueTask<Guid[]> CreateAsync(CreateCredential[] creates, CancellationToken ct)
+    private ValueTask CreateAsync(Credential[] creates, CancellationToken ct)
     {
         if (creates.Length == 0)
         {
-            return [];
+            return ValueTask.CompletedTask;
         }
 
-        var createdIds = new Span<Guid>(new Guid[creates.Length]);
         var entities = new Span<CredentialEntity>(new CredentialEntity[creates.Length]);
 
         for (var index = 0; index < creates.Length; index++)
         {
-            var id = Guid.NewGuid();
-            createdIds[index] = id;
             var createCredential = creates[index];
             entities[index] = new()
             {
                 CustomAvailableCharacters = createCredential.CustomAvailableCharacters,
                 IsAvailableLowerLatin = createCredential.IsAvailableLowerLatin,
-                Id = id,
+                Id = createCredential.Id,
                 IsAvailableNumber = createCredential.IsAvailableNumber,
                 IsAvailableSpecialSymbols = createCredential.IsAvailableSpecialSymbols,
                 IsAvailableUpperLatin = createCredential.IsAvailableUpperLatin,
@@ -253,54 +247,64 @@ public class CredentialService : ICredentialService
             };
         }
 
-        var result = createdIds.ToArray();
-        await CredentialEntity.AddCredentialEntitysAsync(_dbContext, "Service", ct, entities.ToArray());
-
-        return result;
+        return CredentialEntity.AddCredentialEntitysAsync(_dbContext, "Service", ct, entities.ToArray());
     }
 
-    private SqlRawParameters CreateSqlRawParametersForAllChildren(ReadOnlyMemory<Guid> ids)
+    private string CreateSqlForAllChildren(params Guid[] ids)
     {
-        var idsString = Enumerable.Range(0, ids.Length).Select(i => $"@Id{i}").JoinString(", ");
-        var parameters = new DbParameter[ids.Length];
+        var idsString = ids.Select(i => i.ToString().ToUpperInvariant()).JoinString("', '");
 
-        for (var i = 0; i < ids.Length; i++)
-        {
-            parameters[i] = new SqliteParameter($"@Id{i}", ids.Span[i]);
-        }
-
-        return new(
+        return
             $"""
-             WITH RECURSIVE hierarchy(
+             WITH RECURSIVE hierarchy(Id, EntityId, EntityGuidValue) AS (
+                 SELECT
                      Id,
                      EntityId,
                      EntityGuidValue
-                  ) AS (
-                      SELECT
-                      Id,
-                      EntityId,
-                      EntityGuidValue
-                      FROM EventEntity
-                      WHERE EntityId IN ({idsString}) AND EntityProperty = 'ParentId' AND EntityType = 'CredentialEntity' AND Id IN (SELECT MAX(WHEN s.EntityProperty = 'ParentId' AND s.EntityType = 'CredentialEntity' THEN s.Id) FROM EventEntity AS s GROUP BY s.EntityId)
-
-                      UNION ALL
-
-                      SELECT
-                      t.Id,
-                      t.EntityId,
-                      EntityGuidValue
-                      FROM EventEntity t
-                      WHERE EntityProperty = 'ParentId' AND EntityType = 'CredentialEntity' AND t.Id IN (SELECT MAX(WHEN e.EntityProperty = 'ParentId' AND e.EntityType = 'CredentialEntity' THEN e.Id) FROM EventEntity AS e GROUP BY e.EntityId)
-                      INNER JOIN hierarchy h ON t.EntityGuidValue = h.EntityId
-                  )
-                  SELECT DISTINCT EntityId FROM hierarchy;
-             """,
-            parameters
-        );
-    }
-
-    private class TempEntity
-    {
-        public Guid EntityId { get; set; }
+                 FROM
+                     EventEntity
+                 WHERE
+                     EntityId IN ('{idsString}')
+                   AND EntityProperty = 'ParentId'
+                   AND EntityType = 'CredentialEntity'
+                   AND Id IN (
+                     SELECT
+                         MAX(
+                                 CASE WHEN s.EntityProperty = 'ParentId'
+                                     AND s.EntityType = 'CredentialEntity' THEN s.Id END
+                         )
+                     FROM
+                         EventEntity AS s
+                     GROUP BY
+                         s.EntityId
+                 )
+                 UNION ALL
+                 SELECT
+                     t.Id,
+                     t.EntityId,
+                     t.EntityGuidValue
+                 FROM
+                     EventEntity AS t
+                 INNER JOIN hierarchy h ON t.EntityGuidValue = h.EntityId
+                 WHERE
+                     t.EntityProperty = 'ParentId'
+                   AND t.EntityType = 'CredentialEntity'
+                   AND t.Id IN (
+                     SELECT
+                         MAX(
+                                 CASE WHEN e.EntityProperty = 'ParentId'
+                                     AND e.EntityType = 'CredentialEntity' THEN e.Id END
+                         )
+                     FROM
+                         EventEntity AS e
+                     GROUP BY
+                         e.EntityId
+                 )
+             )
+             SELECT
+                 DISTINCT EntityId
+             FROM
+                 hierarchy
+             """;
     }
 }
