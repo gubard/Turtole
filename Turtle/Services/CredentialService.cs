@@ -1,6 +1,6 @@
 ﻿using System.Collections.Frozen;
-using Gaia.Errors;
 using Gaia.Helpers;
+using Gaia.Models;
 using Microsoft.EntityFrameworkCore;
 using Nestor.Db.Helpers;
 using Nestor.Db.Models;
@@ -108,14 +108,12 @@ public class CredentialService : ICredentialService
 
     public async ValueTask<TurtlePostResponse> PostAsync(TurtlePostRequest request, CancellationToken ct)
     {
-        var errors = new List<ValidationError>();
         var response = new TurtlePostResponse();
         await DeleteAsync(request.DeleteIds, ct);
         await CreateAsync(request.CreateCredentials, ct);
         await EditAsync(request.EditCredentials, ct);
-        await ChangeOrderAsync(request.ChangeOrders, errors, ct);
+        await ChangeOrderAsync(request.ChangeOrders,  response.ValidationErrors, ct);
         await _dbContext.SaveChangesAsync(ct);
-        response.ValidationErrors = errors.ToArray();
 
         return response;
     }

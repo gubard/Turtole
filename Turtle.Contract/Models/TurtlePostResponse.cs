@@ -1,9 +1,9 @@
-﻿using Gaia.Errors;
+﻿using Gaia.Models;
 using Gaia.Services;
 
 namespace Turtle.Contract.Models;
 
 public class TurtlePostResponse : IValidationErrors
 {
-    public ValidationError[] ValidationErrors { get; set; } = [];
+    public List<ValidationError> ValidationErrors { get; set; } = [];
 }

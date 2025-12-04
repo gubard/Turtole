@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using Gaia.Errors;
+using Gaia.Models;
 
 namespace Turtle.Contract.Models;
 
