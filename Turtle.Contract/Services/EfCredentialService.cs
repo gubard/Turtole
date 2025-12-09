@@ -67,8 +67,12 @@ public sealed class EfCredentialService : EfService<TurtleGetRequest,
                .Where(x => query.Contains(x.EntityId)), ct);
         var credentialsDictionary =
             credentials.ToDictionary(x => x.Id).ToFrozenDictionary();
-        response.Roots.AddRange(credentials.Where(x => x.ParentId is null)
-           .Select(ToCredential));
+
+        if (request.IsGetRoots)
+        {
+            response.Roots = credentials.Where(x => x.ParentId is null)
+               .Select(ToCredential).ToArray();
+        }
 
         foreach (var id in request.GetChildrenIds)
         {

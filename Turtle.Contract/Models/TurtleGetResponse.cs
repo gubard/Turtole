@@ -6,7 +6,7 @@ namespace Turtle.Contract.Models;
 
 public class TurtleGetResponse : IValidationErrors, IResponse
 {
-    public List<Credential> Roots { get; set; } = [];
+    public Credential[]? Roots { get; set; }
     public Dictionary<Guid, List<Credential>> Children { get; set; } = [];
     public Dictionary<Guid, List<Credential>> Parents { get; set; } = [];
     public List<ValidationError> ValidationErrors { get; set; } = [];
