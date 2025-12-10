@@ -2,7 +2,7 @@
 
 public class EditCredential
 {
-    public Guid Id { get; set; }
+    public Guid[] Ids { get; set; } = [];
     public bool IsEditName { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsEditLogin { get; set; }

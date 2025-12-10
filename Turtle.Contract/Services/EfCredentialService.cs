@@ -274,34 +274,38 @@ public sealed class EfCredentialService : EfService<TurtleGetRequest,
             return ValueTask.CompletedTask;
         }
 
-        var editEntities =
-            new Span<EditCredentialEntity>(
-                new EditCredentialEntity[edits.Length]);
+        var editEntities = new List<EditCredentialEntity>();
 
         for (var index = 0; index < edits.Length; index++)
         {
             var editCredential = edits[index];
-            editEntities[index] = new(editCredential.Id)
+
+            foreach (var id in editCredential.Ids)
             {
-                CustomAvailableCharacters =
-                    editCredential.CustomAvailableCharacters,
-                IsAvailableLowerLatin = editCredential.IsAvailableLowerLatin,
-                IsAvailableNumber = editCredential.IsAvailableNumber,
-                IsAvailableSpecialSymbols =
-                    editCredential.IsAvailableSpecialSymbols,
-                IsAvailableUpperLatin = editCredential.IsAvailableUpperLatin,
-                Key = editCredential.Key,
-                Length = editCredential.Length,
-                Login = editCredential.Login,
-                Name = editCredential.Name,
-                Regex = editCredential.Regex,
-                Type = editCredential.Type,
-                ParentId = editCredential.ParentId,
-            };
+                editEntities.Add(new(id)
+                {
+                    CustomAvailableCharacters =
+                        editCredential.CustomAvailableCharacters,
+                    IsAvailableLowerLatin =
+                        editCredential.IsAvailableLowerLatin,
+                    IsAvailableNumber = editCredential.IsAvailableNumber,
+                    IsAvailableSpecialSymbols =
+                        editCredential.IsAvailableSpecialSymbols,
+                    IsAvailableUpperLatin =
+                        editCredential.IsAvailableUpperLatin,
+                    Key = editCredential.Key,
+                    Length = editCredential.Length,
+                    Login = editCredential.Login,
+                    Name = editCredential.Name,
+                    Regex = editCredential.Regex,
+                    Type = editCredential.Type,
+                    ParentId = editCredential.ParentId,
+                });
+            }
         }
 
         return CredentialEntity.EditCredentialEntitysAsync(DbContext,
-            "Service", editEntities.ToArray(), ct);
+            "Service", editEntities, ct);
     }
 
     private ValueTask CreateAsync(Credential[] creates, CancellationToken ct)
@@ -440,30 +444,34 @@ public sealed class EfCredentialService : EfService<TurtleGetRequest,
             return;
         }
 
-        var editEntities =
-            new Span<EditCredentialEntity>(
-                new EditCredentialEntity[edits.Length]);
+        var editEntities = new List<EditCredentialEntity>();
 
         for (var index = 0; index < edits.Length; index++)
         {
             var editCredential = edits[index];
-            editEntities[index] = new(editCredential.Id)
+
+            foreach (var id in editCredential.Ids)
             {
-                CustomAvailableCharacters =
-                    editCredential.CustomAvailableCharacters,
-                IsAvailableLowerLatin = editCredential.IsAvailableLowerLatin,
-                IsAvailableNumber = editCredential.IsAvailableNumber,
-                IsAvailableSpecialSymbols =
-                    editCredential.IsAvailableSpecialSymbols,
-                IsAvailableUpperLatin = editCredential.IsAvailableUpperLatin,
-                Key = editCredential.Key,
-                Length = editCredential.Length,
-                Login = editCredential.Login,
-                Name = editCredential.Name,
-                Regex = editCredential.Regex,
-                Type = editCredential.Type,
-                ParentId = editCredential.ParentId,
-            };
+                editEntities.Add(new(id)
+                {
+                    CustomAvailableCharacters =
+                        editCredential.CustomAvailableCharacters,
+                    IsAvailableLowerLatin =
+                        editCredential.IsAvailableLowerLatin,
+                    IsAvailableNumber = editCredential.IsAvailableNumber,
+                    IsAvailableSpecialSymbols =
+                        editCredential.IsAvailableSpecialSymbols,
+                    IsAvailableUpperLatin =
+                        editCredential.IsAvailableUpperLatin,
+                    Key = editCredential.Key,
+                    Length = editCredential.Length,
+                    Login = editCredential.Login,
+                    Name = editCredential.Name,
+                    Regex = editCredential.Regex,
+                    Type = editCredential.Type,
+                    ParentId = editCredential.ParentId,
+                });
+            }
         }
 
         CredentialEntity.EditCredentialEntitys(DbContext,
